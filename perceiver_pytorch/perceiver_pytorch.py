@@ -83,7 +83,7 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, x, context = None):
+    def forward(self, x, context = None, mask = None):
         h = self.heads
 
         q = self.to_q(x)
@@ -93,7 +93,15 @@ class Attention(nn.Module):
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
 
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
+
+        if exists(mask):
+            max_neg_value = -torch.finfo(sim.dtype).max
+            mask = repeat(mask, 'b j -> (b h) () j', h = h)
+            sim.masked_fill_(~mask, max_neg_value)
+
+        # attention, what we cannot get enough of
         attn = sim.softmax(dim = -1)
+
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
         return self.to_out(out)
@@ -143,14 +151,14 @@ class Perceiver(nn.Module):
 
         self.to_logits = nn.Linear(latent_dim, num_classes)
 
-    def forward(self, data):
+    def forward(self, data, mask = None):
         b = data.shape[0]
         data = fourier_encode(data, self.num_fourier_features)
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
         for cross_attn, cross_ff, latent_attn, latent_ff in self.layers:
-            x = cross_attn(x, context = data) + x
+            x = cross_attn(x, context = data, mask = mask) + x
             x = cross_ff(x) + x
             x = latent_attn(x) + x
             x = latent_ff(x) + x
