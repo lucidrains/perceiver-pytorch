@@ -28,7 +28,8 @@ model = Perceiver(
     latent_dim_head = 64,
     num_classes = 1000,          # output number of classes
     attn_dropout = 0.,
-    ff_dropout = 0.
+    ff_dropout = 0.,
+    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
 img = torch.randn(1, 224 * 224) # 1 imagenet image, pixelized

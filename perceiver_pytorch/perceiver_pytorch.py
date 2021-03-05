@@ -1,3 +1,5 @@
+from functools import wraps
+
 import torch
 from torch import nn, einsum
 import torch.nn.functional as F
@@ -11,6 +13,17 @@ def exists(val):
 
 def default(val, d):
     return val if exists(val) else d
+
+def cache_fn(f):
+    cache = None
+    @wraps(f)
+    def cached_fn(*args, **kwargs):
+        nonlocal cache
+        if cache is not None:
+            return cache
+        cache = f(*args, **kwargs)
+        return cache
+    return cached_fn
 
 def fourier_encode(x, num_encodings = 4):
     x = x.unsqueeze(-1)
@@ -102,7 +115,8 @@ class Perceiver(nn.Module):
         latent_dim_head = 64,
         num_classes = 1000,
         attn_dropout = 0.,
-        ff_dropout = 0.
+        ff_dropout = 0.,
+        weight_tie_layers = False
     ):
         super().__init__()
 
@@ -110,13 +124,21 @@ class Perceiver(nn.Module):
         input_dim = (num_fourier_features * 2) + 1
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
+        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, dropout = attn_dropout), context_dim = input_dim)
+        get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
+        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, dropout = attn_dropout))
+        get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
+
+        if weight_tie_layers:
+            get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
+
         self.layers = nn.ModuleList([])
         for _ in range(depth):
             self.layers.append(nn.ModuleList([
-                PreNorm(latent_dim, Attention(latent_dim, input_dim, dropout = attn_dropout), context_dim = input_dim),
-                PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout)),
-                PreNorm(latent_dim, Attention(latent_dim, dropout = attn_dropout)),
-                PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
+                get_cross_attn(),
+                get_cross_ff(),
+                get_latent_attn(),
+                get_latent_ff()
             ]))
 
         self.to_logits = nn.Linear(latent_dim, num_classes)
