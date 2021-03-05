@@ -14,10 +14,10 @@ $ pip install perceiver-pytorch
 
 ```python
 import torch
-from perceiver_pytorch.perceiver_pytorch import Perceiver
+from perceiver_pytorch import Perceiver
 
 model = Perceiver(
-	num_fourier_features = 6,    # number of fourier features, with original value (2 * K + 1)
+    num_fourier_features = 6,    # number of fourier features, with original value (2 * K + 1)
     depth = 48,                  # depth of net, in paper, they went deep, making up for lack of attention
     num_latents = 6,             # number of latents, or induced set points, or centroids. different papers giving it different names
     cross_dim = 512,             # cross attention dimension
@@ -28,7 +28,8 @@ model = Perceiver(
     latent_dim_head = 64,
     num_classes = 1000,          # output number of classes
     attn_dropout = 0.,
-    ff_dropout = 0.
+    ff_dropout = 0.,
+    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
 img = torch.randn(1, 224 * 224) # 1 imagenet image, pixelized
