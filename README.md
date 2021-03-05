@@ -1,6 +1,6 @@
-## Perceiver - Pytorch
+## Perceiver - Pytorch (wip)
 
-Implementation of Perceiver, General Perception with Iterative Attention, in Pytorch
+Implementation of <a href="https://arxiv.org/abs/2103.03206">Perceiver</a>, General Perception with Iterative Attention, in Pytorch
 
 ## Citations
 
