@@ -1,4 +1,6 @@
-## Perceiver - Pytorch (wip)
+<img src="./perceiver.png" width="600px"></img>
+
+## Perceiver - Pytorch
 
 Implementation of <a href="https://arxiv.org/abs/2103.03206">Perceiver</a>, General Perception with Iterative Attention, in Pytorch
 
@@ -31,7 +33,7 @@ model = Perceiver(
 
 img = torch.randn(1, 224 * 224) # 1 imagenet image, pixelized
 
-model(img)
+model(img) # (1, 1000)
 ```
 ## Citations
 
