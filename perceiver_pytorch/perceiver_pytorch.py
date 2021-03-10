@@ -130,7 +130,9 @@ class Perceiver(nn.Module):
 
         self.num_fourier_features = num_fourier_features
         input_dim = (num_fourier_features * 2) + 1
+
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
+        self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, dropout = attn_dropout), context_dim = input_dim)
         get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
@@ -155,7 +157,8 @@ class Perceiver(nn.Module):
         b = data.shape[0]
         data = fourier_encode(data, self.num_fourier_features)
 
-        x = repeat(self.latents, 'n d -> b n d', b = b)
+        x = self.latents + self.pos_emb
+        x = repeat(x, 'n d -> b n d', b = b)
 
         for cross_attn, cross_ff, latent_attn, latent_ff in self.layers:
             x = cross_attn(x, context = data, mask = mask) + x
