@@ -115,6 +115,7 @@ class Perceiver(nn.Module):
         num_fourier_features,
         depth,
         input_channels = 3,
+        input_axis = 2,
         num_latents = 512,
         cross_dim = 512,
         latent_dim = 512,
@@ -128,9 +129,10 @@ class Perceiver(nn.Module):
         weight_tie_layers = False
     ):
         super().__init__()
-
+        self.input_axis = input_axis
         self.num_fourier_features = num_fourier_features
-        input_dim = ((num_fourier_features * 2) + 1) * input_channels
+
+        input_dim = input_axis * ((num_fourier_features * 2) + 1) + input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
@@ -155,9 +157,21 @@ class Perceiver(nn.Module):
         self.to_logits = nn.Linear(latent_dim, num_classes)
 
     def forward(self, data, mask = None):
-        b = data.shape[0]
-        data = fourier_encode(data, self.num_fourier_features)
-        data = rearrange(data, 'b n ... -> b n (...)')
+        b, *axis, _, device = *data.shape, data.device
+        assert len(axis) == self.input_axis, 'input data must have the right number of axis'
+
+        # calculate fourier encoded positions in the range of [-1, 1], for all axis
+
+        axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
+        pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
+        enc_pos = fourier_encode(pos, self.num_fourier_features)
+        enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
+        enc_pos = repeat(enc_pos, '... -> b ...', b = b)
+
+        # concat to channels of data and flatten axis
+
+        data = torch.cat((data, enc_pos), dim = -1)
+        data = rearrange(data, 'b ... d -> b (...) d')
 
         x = self.latents + self.pos_emb
         x = repeat(x, 'n d -> b n d', b = b)

@@ -18,6 +18,7 @@ from perceiver_pytorch import Perceiver
 
 model = Perceiver(
     input_channels = 3,          # number of channels for each token of the input
+    input_axis = 2,              # number of axis for input data (2 for images, 3 for video)
     num_fourier_features = 6,    # number of fourier features, with original value (2 * K + 1)
     depth = 6,                   # depth of net
     num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
@@ -33,7 +34,7 @@ model = Perceiver(
     weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
-img = torch.randn(1, 224 * 224, 3) # 1 imagenet image, pixelized
+img = torch.randn(1, 224, 224, 3) # 1 imagenet image, pixelized
 
 model(img) # (1, 1000)
 ```
