@@ -114,7 +114,8 @@ class Perceiver(nn.Module):
         *,
         num_fourier_features,
         depth,
-        num_latents = 6,
+        input_channels = 3,
+        num_latents = 512,
         cross_dim = 512,
         latent_dim = 512,
         cross_heads = 1,
@@ -129,7 +130,7 @@ class Perceiver(nn.Module):
         super().__init__()
 
         self.num_fourier_features = num_fourier_features
-        input_dim = (num_fourier_features * 2) + 1
+        input_dim = ((num_fourier_features * 2) + 1) * input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
@@ -156,6 +157,7 @@ class Perceiver(nn.Module):
     def forward(self, data, mask = None):
         b = data.shape[0]
         data = fourier_encode(data, self.num_fourier_features)
+        data = rearrange(data, 'b n ... -> b n (...)')
 
         x = self.latents + self.pos_emb
         x = repeat(x, 'n d -> b n d', b = b)

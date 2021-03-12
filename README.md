@@ -17,9 +17,10 @@ import torch
 from perceiver_pytorch import Perceiver
 
 model = Perceiver(
+    input_channels = 3,          # number of channels for each token of the input
     num_fourier_features = 6,    # number of fourier features, with original value (2 * K + 1)
-    depth = 48,                  # depth of net, in paper, they went deep, making up for lack of attention
-    num_latents = 6,             # number of latents, or induced set points, or centroids. different papers giving it different names
+    depth = 6,                   # depth of net
+    num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
     cross_dim = 512,             # cross attention dimension
     latent_dim = 512,            # latent dimension
     cross_heads = 1,             # number of heads for cross attention. paper said 1
@@ -32,7 +33,7 @@ model = Perceiver(
     weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
-img = torch.randn(1, 224 * 224) # 1 imagenet image, pixelized
+img = torch.randn(1, 224 * 224, 3) # 1 imagenet image, pixelized
 
 model(img) # (1, 1000)
 ```
