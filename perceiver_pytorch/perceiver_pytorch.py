@@ -63,12 +63,17 @@ class PreNorm(nn.Module):
 
         return self.fn(x, **kwargs)
 
+class GEGLU(nn.Module):
+    def forward(self, x):
+        x, gates = x.chunk(2, dim = -1)
+        return x * F.gelu(gates)
+
 class FeedForward(nn.Module):
     def __init__(self, dim, mult = 4, dropout = 0.):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(dim, dim * mult),
-            nn.GELU(),
+            nn.Linear(dim, dim * mult * 2),
+            GEGLU(),
             nn.Dropout(dropout),
             nn.Linear(dim * mult, dim)
         )
