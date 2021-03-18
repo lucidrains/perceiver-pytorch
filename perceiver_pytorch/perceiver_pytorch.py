@@ -36,12 +36,22 @@ def fourier_encode(x, num_encodings = 4):
 
 # helper classes
 
+class ScaleNorm(nn.Module):
+    def __init__(self, dim, eps = 1e-5):
+        super().__init__()
+        self.eps = eps
+        self.g = nn.Parameter(torch.ones(1))
+
+    def forward(self, x):
+        n = torch.norm(x, dim = -1, keepdim = True).clamp(min = self.eps)
+        return x / n * self.g
+
 class PreNorm(nn.Module):
     def __init__(self, dim, fn, context_dim = None):
         super().__init__()
         self.fn = fn
-        self.norm = nn.LayerNorm(dim)
-        self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
+        self.norm = ScaleNorm(dim)
+        self.norm_context = ScaleNorm(context_dim) if exists(context_dim) else None
 
     def forward(self, x, **kwargs):
         x = self.norm(x)
@@ -154,7 +164,10 @@ class Perceiver(nn.Module):
                 get_latent_ff()
             ]))
 
-        self.to_logits = nn.Linear(latent_dim, num_classes)
+        self.to_logits = nn.Sequential(
+            ScaleNorm(latent_dim),
+            nn.Linear(latent_dim, num_classes)
+        )
 
     def forward(self, data, mask = None):
         b, *axis, _, device = *data.shape, data.device
