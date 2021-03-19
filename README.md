@@ -19,7 +19,8 @@ from perceiver_pytorch import Perceiver
 model = Perceiver(
     input_channels = 3,          # number of channels for each token of the input
     input_axis = 2,              # number of axis for input data (2 for images, 3 for video)
-    num_fourier_features = 6,    # number of fourier features, with original value (2 * K + 1)
+    num_freq_bands = 6,          # number of freq bands, with original value (2 * K + 1)
+    max_freq = 10.,              # maximum frequency, hyperparameter depending on how fine the data is
     depth = 6,                   # depth of net
     num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
     cross_dim = 512,             # cross attention dimension
