@@ -1,3 +1,4 @@
+from math import pi, log
 from functools import wraps
 
 import torch
@@ -25,11 +26,14 @@ def cache_fn(f):
         return cache
     return cached_fn
 
-def fourier_encode(x, num_encodings = 4):
+def fourier_encode(x, max_freq, num_bands = 4, base = 2):
     x = x.unsqueeze(-1)
     device, dtype, orig_x = x.device, x.dtype, x
-    scales = 2 ** torch.arange(num_encodings, device = device, dtype = dtype)
-    x = x / scales
+
+    scales = torch.logspace(1., log(max_freq / 2) / log(base), num_bands, base = base, device = device, dtype = dtype)
+    scales = rearrange(scales, 's -> () () () s')
+
+    x = x * scales * pi
     x = torch.cat([x.sin(), x.cos()], dim=-1)
     x = torch.cat((x, orig_x), dim = -1)
     return x
@@ -127,8 +131,10 @@ class Perceiver(nn.Module):
     def __init__(
         self,
         *,
-        num_fourier_features,
+        num_freq_bands,
         depth,
+        max_freq,
+        freq_base = 2,
         input_channels = 3,
         input_axis = 2,
         num_latents = 512,
@@ -145,9 +151,11 @@ class Perceiver(nn.Module):
     ):
         super().__init__()
         self.input_axis = input_axis
-        self.num_fourier_features = num_fourier_features
+        self.max_freq = max_freq
+        self.num_freq_bands = num_freq_bands
+        self.freq_base = freq_base
 
-        input_dim = input_axis * ((num_fourier_features * 2) + 1) + input_channels
+        input_dim = input_axis * ((num_freq_bands * 2) + 1) + input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
@@ -182,7 +190,7 @@ class Perceiver(nn.Module):
 
         axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
         pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
-        enc_pos = fourier_encode(pos, self.num_fourier_features)
+        enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands, base = self.freq_base)
         enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
         enc_pos = repeat(enc_pos, '... -> b ...', b = b)
 
