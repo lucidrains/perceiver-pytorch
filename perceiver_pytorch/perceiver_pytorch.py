@@ -41,14 +41,13 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
 # helper classes
 
 class ScaleNorm(nn.Module):
-    def __init__(self, dim, eps = 1e-5):
+    def __init__(self, dim, eps=1e-5):
         super().__init__()
+        self.scale = nn.Parameter(torch.tensor(dim ** 0.5))
         self.eps = eps
-        self.g = nn.Parameter(torch.ones(1))
 
     def forward(self, x):
-        n = torch.norm(x, dim = -1, keepdim = True).clamp(min = self.eps)
-        return x / n * self.g
+        return x * self.scale / torch.norm(x, dim=-1, keepdim=True).clamp(min=self.eps)
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn, context_dim = None):
@@ -142,8 +141,6 @@ class Perceiver(nn.Module):
         latent_dim = 512,
         cross_heads = 1,
         latent_heads = 8,
-        cross_dim_head = 64,
-        latent_dim_head = 64,
         num_classes = 1000,
         attn_dropout = 0.,
         ff_dropout = 0.,
@@ -160,9 +157,9 @@ class Perceiver(nn.Module):
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
-        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, dropout = attn_dropout), context_dim = input_dim)
+        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dropout = attn_dropout), context_dim = input_dim)
         get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
-        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, dropout = attn_dropout))
+        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dropout = attn_dropout))
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
         if weight_tie_layers:
