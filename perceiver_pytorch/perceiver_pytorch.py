@@ -55,7 +55,7 @@ class PreNorm(nn.Module):
         super().__init__()
         self.fn = fn
         self.norm = ScaleNorm(dim)
-        self.norm_context = ScaleNorm(context_dim) if exists(context_dim) else None
+        self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
 
     def forward(self, x, **kwargs):
         x = self.norm(x)
