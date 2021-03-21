@@ -40,10 +40,10 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
 
 # helper classes
 
-class ScaleNorm(nn.Module):
+class RMSNorm(nn.Module):
     def __init__(self, dim, eps = 1e-5):
         super().__init__()
-        self.scale = nn.Parameter(torch.tensor(dim ** 0.5))
+        self.scale = nn.Parameter(torch.ones(1, 1, dim))
         self.eps = eps
 
     def forward(self, x):
@@ -53,7 +53,7 @@ class PreNorm(nn.Module):
     def __init__(self, dim, fn, context_dim = None):
         super().__init__()
         self.fn = fn
-        self.norm = ScaleNorm(dim)
+        self.norm = RMSNorm(dim)
         self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
 
     def forward(self, x, **kwargs):
@@ -141,6 +141,8 @@ class Perceiver(nn.Module):
         latent_dim = 512,
         cross_heads = 1,
         latent_heads = 8,
+        cross_dim_head = 64,
+        latent_dim_head = 64,
         num_classes = 1000,
         attn_dropout = 0.,
         ff_dropout = 0.,
@@ -157,9 +159,9 @@ class Perceiver(nn.Module):
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
-        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dropout = attn_dropout), context_dim = input_dim)
+        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, dropout = attn_dropout), context_dim = input_dim)
         get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
-        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dropout = attn_dropout))
+        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout))
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
         if weight_tie_layers:
@@ -175,7 +177,7 @@ class Perceiver(nn.Module):
             ]))
 
         self.to_logits = nn.Sequential(
-            ScaleNorm(latent_dim),
+            RMSNorm(latent_dim),
             nn.Linear(latent_dim, num_classes)
         )
 
