@@ -44,6 +44,8 @@ class Perceiver(nn.Module):
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
         self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
+        self.data_proj = nn.Linear(input_dim, input_dim)
+
         get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, dropout = attn_dropout), context_dim = input_dim)
         get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
@@ -88,6 +90,8 @@ class Perceiver(nn.Module):
 
         data = torch.cat((data, enc_pos), dim = -1)
         data = rearrange(data, 'b ... d -> b (...) d')
+
+        data = self.data_proj(data)
 
         x = self.latents + self.pos_emb
         x = repeat(x, 'n d -> b n d', b = b)
