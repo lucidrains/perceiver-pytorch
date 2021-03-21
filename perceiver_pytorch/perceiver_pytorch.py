@@ -43,11 +43,13 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
 class RMSNorm(nn.Module):
     def __init__(self, dim, eps = 1e-5):
         super().__init__()
-        self.scale = nn.Parameter(torch.ones(1, 1, dim))
+        self.scale = dim ** -0.5
+        self.g = nn.Parameter(torch.ones(1, 1, dim))
         self.eps = eps
 
     def forward(self, x):
-        return x * self.scale / torch.norm(x, dim=-1, keepdim=True).clamp(min=self.eps)
+        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
+        return x * self.g / norm.clamp(min=self.eps)
 
 class PreNorm(nn.Module):
     def __init__(self, dim, fn, context_dim = None):
