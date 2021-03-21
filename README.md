@@ -39,6 +39,17 @@ img = torch.randn(1, 224, 224, 3) # 1 imagenet image, pixelized
 
 model(img) # (1, 1000)
 ```
+
+## Experimental
+
+I have also included a version of Perceiver that includes bottom-up (in addition to top-down) attention, using the same scheme as presented in the original <a href="https://arxiv.org/abs/1810.00825">Set Transformers</a> paper as the <a href="https://github.com/lucidrains/isab-pytorch">Induced Set Attention Block</a>.
+
+You simply have to change the above import to
+
+```python
+from perceiver_pytorch.experimental import Perceiver
+```
+
 ## Citations
 
 ```bibtex
