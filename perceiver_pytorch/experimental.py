@@ -54,7 +54,7 @@ class Perceiver(nn.Module):
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
         if weight_tie_layers:
-            get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
+            get_cross_attn, get_cross_ff, get_rev_cross_attn, get_rev_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_rev_cross_attn, get_rev_cross_ff, get_latent_attn, get_latent_ff))
 
         self.layers = nn.ModuleList([])
         for _ in range(depth):
