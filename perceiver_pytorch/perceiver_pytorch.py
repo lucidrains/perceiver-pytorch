@@ -41,7 +41,7 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
 # helper classes
 
 class ScaleNorm(nn.Module):
-    def __init__(self, dim, eps=1e-5):
+    def __init__(self, dim, eps = 1e-5):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor(dim ** 0.5))
         self.eps = eps
