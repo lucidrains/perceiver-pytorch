@@ -94,7 +94,7 @@ class Perceiver(nn.Module):
 
         self.layers = nn.ModuleList([])
         for i in range(depth):
-            should_cache = i > 1 and weight_tie_layers
+            should_cache = i > 0 and weight_tie_layers
             cache_args = {'_cache': should_cache}
 
             self.layers.append(nn.ModuleList([
