@@ -18,7 +18,9 @@ def default(val, d):
 def cache_fn(f):
     cache = None
     @wraps(f)
-    def cached_fn(*args, **kwargs):
+    def cached_fn(*args, _cache = True, **kwargs):
+        if not _cache:
+            return f(*args, **kwargs)
         nonlocal cache
         if cache is not None:
             return cache
@@ -165,16 +167,18 @@ class Perceiver(nn.Module):
         get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout))
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
-        if weight_tie_layers:
-            get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
+        get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
 
         self.layers = nn.ModuleList([])
-        for _ in range(depth):
+        for i in range(depth):
+            should_cache = i > 1 and weight_tie_layers
+            cache_args = {'_cache': should_cache}
+
             self.layers.append(nn.ModuleList([
-                get_cross_attn(),
-                get_cross_ff(),
-                get_latent_attn(),
-                get_latent_ff()
+                get_cross_attn(**cache_args),
+                get_cross_ff(**cache_args),
+                get_latent_attn(**cache_args),
+                get_latent_ff(**cache_args)
             ]))
 
         self.to_logits = nn.Sequential(
