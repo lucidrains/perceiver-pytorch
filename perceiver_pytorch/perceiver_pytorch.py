@@ -106,6 +106,7 @@ class Attention(nn.Module):
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
         if exists(mask):
+            mask = rearrange(mask, 'b ... -> b (...)')
             max_neg_value = -torch.finfo(sim.dtype).max
             mask = repeat(mask, 'b j -> (b h) () j', h = h)
             sim.masked_fill_(~mask, max_neg_value)

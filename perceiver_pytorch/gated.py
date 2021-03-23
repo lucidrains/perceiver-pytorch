@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 
-from perceiver_pytorch.perceiver_pytorch import exists, default, cache_fn, fourier_encode, RMSNorm, PreNorm, FeedForward, Attention
+from perceiver_pytorch.perceiver_pytorch import exists, default, cache_fn, fourier_encode, PreNorm, FeedForward, Attention
 
 # helpers
 
@@ -89,7 +89,7 @@ class Perceiver(nn.Module):
             ]))
 
         self.to_logits = nn.Sequential(
-            RMSNorm(latent_dim),
+            nn.LayerNorm(latent_dim),
             nn.Linear(latent_dim, num_classes)
         )
 
