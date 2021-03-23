@@ -42,22 +42,11 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
 
 # helper classes
 
-class RMSNorm(nn.Module):
-    def __init__(self, dim, eps = 1e-5):
-        super().__init__()
-        self.scale = dim ** -0.5
-        self.g = nn.Parameter(torch.ones(dim))
-        self.eps = eps
-
-    def forward(self, x):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
-        return x * self.g / norm.clamp(min=self.eps)
-
 class PreNorm(nn.Module):
     def __init__(self, dim, fn, context_dim = None):
         super().__init__()
         self.fn = fn
-        self.norm = RMSNorm(dim)
+        self.norm = nn.LayerNorm(dim)
         self.norm_context = nn.LayerNorm(context_dim) if exists(context_dim) else None
 
     def forward(self, x, **kwargs):
@@ -182,7 +171,7 @@ class Perceiver(nn.Module):
             ]))
 
         self.to_logits = nn.Sequential(
-            RMSNorm(latent_dim),
+            nn.LayerNorm(latent_dim),
             nn.Linear(latent_dim, num_classes)
         )
 
