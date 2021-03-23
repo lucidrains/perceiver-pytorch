@@ -77,7 +77,6 @@ class Perceiver(nn.Module):
         input_dim = input_axis * ((num_freq_bands * 2) + 1) + input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
-        self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         self.data_proj = nn.Linear(input_dim, input_dim)
 
@@ -130,8 +129,7 @@ class Perceiver(nn.Module):
 
         data = self.data_proj(data)
 
-        x = self.latents + self.pos_emb
-        x = repeat(x, 'n d -> b n d', b = b)
+        x = repeat(self.latents, 'n d -> b n d', b = b)
 
         for i, (cross_attn, cross_ff, rev_cross_attn, rev_cross_ff, input_attn, latent_attn, latent_ff) in enumerate(self.layers):
             is_last = i == (len(self.layers) - 1)

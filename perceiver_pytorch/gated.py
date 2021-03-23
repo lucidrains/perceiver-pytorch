@@ -68,7 +68,6 @@ class Perceiver(nn.Module):
         input_dim = input_axis * ((num_freq_bands * 2) + 1) + input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
-        self.pos_emb = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         get_cross_attn  = lambda: GRUGating(latent_dim, PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, dropout = attn_dropout), context_dim = input_dim))
         get_latent_attn = lambda: GRUGating(latent_dim, PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout)))
@@ -109,8 +108,7 @@ class Perceiver(nn.Module):
         data = torch.cat((data, enc_pos), dim = -1)
         data = rearrange(data, 'b ... d -> b (...) d')
 
-        x = self.latents + self.pos_emb
-        x = repeat(x, 'n d -> b n d', b = b)
+        x = repeat(self.latents, 'n d -> b n d', b = b)
 
         for cross_attn, cross_ff, latent_attn, latent_ff in self.layers:
             x = cross_attn(x, context = data, mask = mask)
