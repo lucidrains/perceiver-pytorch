@@ -87,7 +87,7 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 class Attention(nn.Module):
-    def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 75, dropout = 0.):
+    def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
