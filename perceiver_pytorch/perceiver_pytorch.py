@@ -139,7 +139,9 @@ class Perceiver(nn.Module):
         num_classes = 1000,
         attn_dropout = 0.,
         ff_dropout = 0.,
-        weight_tie_layers = False
+        weight_tie_layers = False,
+        fourier_encode_data = True,
+        self_per_cross_attn = 1
     ):
         super().__init__()
         self.input_axis = input_axis
@@ -147,7 +149,9 @@ class Perceiver(nn.Module):
         self.num_freq_bands = num_freq_bands
         self.freq_base = freq_base
 
-        input_dim = input_axis * ((num_freq_bands * 2) + 1) + input_channels
+        self.fourier_encode_data = fourier_encode_data
+        fourier_channels = (input_axis * ((num_freq_bands * 2) + 1)) if fourier_encode_data else 0
+        input_dim = fourier_channels + input_channels
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
@@ -163,11 +167,18 @@ class Perceiver(nn.Module):
             should_cache = i > 0 and weight_tie_layers
             cache_args = {'_cache': should_cache}
 
+            self_attns = nn.ModuleList([])
+
+            for _ in range(self_per_cross_attn):
+                self_attns.append(nn.ModuleList([
+                    get_latent_attn(**cache_args),
+                    get_latent_ff(**cache_args)
+                ]))
+
             self.layers.append(nn.ModuleList([
                 get_cross_attn(**cache_args),
                 get_cross_ff(**cache_args),
-                get_latent_attn(**cache_args),
-                get_latent_ff(**cache_args)
+                self_attns
             ]))
 
         self.to_logits = nn.Sequential(
@@ -179,26 +190,30 @@ class Perceiver(nn.Module):
         b, *axis, _, device = *data.shape, data.device
         assert len(axis) == self.input_axis, 'input data must have the right number of axis'
 
-        # calculate fourier encoded positions in the range of [-1, 1], for all axis
+        if self.fourier_encode_data:
+            # calculate fourier encoded positions in the range of [-1, 1], for all axis
 
-        axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
-        pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
-        enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands, base = self.freq_base)
-        enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
-        enc_pos = repeat(enc_pos, '... -> b ...', b = b)
+            axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
+            pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
+            enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands, base = self.freq_base)
+            enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
+            enc_pos = repeat(enc_pos, '... -> b ...', b = b)
+
+            data = torch.cat((data, enc_pos), dim = -1)
 
         # concat to channels of data and flatten axis
 
-        data = torch.cat((data, enc_pos), dim = -1)
         data = rearrange(data, 'b ... d -> b (...) d')
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
-        for cross_attn, cross_ff, latent_attn, latent_ff in self.layers:
+        for cross_attn, cross_ff, self_attns in self.layers:
             x = cross_attn(x, context = data, mask = mask) + x
             x = cross_ff(x) + x
-            x = latent_attn(x) + x
-            x = latent_ff(x) + x
+
+            for self_attn, self_ff in self_attns:
+                x = self_attn(x) + x
+                x = self_ff(x) + x
 
         x = x.mean(dim = -2)
         return self.to_logits(x)

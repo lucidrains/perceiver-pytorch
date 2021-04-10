@@ -33,7 +33,9 @@ model = Perceiver(
     num_classes = 1000,          # output number of classes
     attn_dropout = 0.,
     ff_dropout = 0.,
-    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
+    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
+    fourier_encode_data = True,  # whether to auto-fourier encode the data, using the input_axis given. defaults to True, but can be turned off if you are fourier encoding the data yourself
+    self_per_cross_attn = 2      # number of self attention blocks per cross attention
 )
 
 img = torch.randn(1, 224, 224, 3) # 1 imagenet image, pixelized
