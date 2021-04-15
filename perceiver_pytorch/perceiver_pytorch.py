@@ -32,7 +32,7 @@ def fourier_encode(x, max_freq, num_bands = 4, base = 2):
     x = x.unsqueeze(-1)
     device, dtype, orig_x = x.device, x.dtype, x
 
-    scales = torch.logspace(1., log(max_freq / 2) / log(base), num_bands, base = base, device = device, dtype = dtype)
+    scales = torch.logspace(0., log(max_freq / 2) / log(base), num_bands, base = base, device = device, dtype = dtype)
     scales = scales[(*((None,) * (len(x.shape) - 1)), Ellipsis)]
 
     x = x * scales * pi
