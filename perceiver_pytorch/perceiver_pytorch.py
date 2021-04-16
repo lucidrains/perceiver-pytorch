@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 
+from perceiver_pytorch.rotary import SinusoidalEmbeddings, apply_rotary_emb
+
 # helpers
 
 def exists(val):
@@ -94,7 +96,7 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, x, context = None, mask = None):
+    def forward(self, x, context = None, mask = None, pos_emb = None):
         h = self.heads
 
         q = self.to_q(x)
@@ -102,6 +104,9 @@ class Attention(nn.Module):
         k, v = self.to_kv(context).chunk(2, dim = -1)
 
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
+
+        if exists(pos_emb):
+            q, k = apply_rotary_emb(q, k, pos_emb)
 
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
@@ -141,7 +146,8 @@ class Perceiver(nn.Module):
         ff_dropout = 0.,
         weight_tie_layers = False,
         fourier_encode_data = True,
-        self_per_cross_attn = 1
+        self_per_cross_attn = 1,
+        self_attn_rel_pos = True
     ):
         super().__init__()
         self.input_axis = input_axis
@@ -186,6 +192,10 @@ class Perceiver(nn.Module):
             nn.Linear(latent_dim, num_classes)
         )
 
+        self.sinu_emb = None
+        if self_attn_rel_pos:
+            self.sinu_emb = SinusoidalEmbeddings(latent_dim_head)
+
     def forward(self, data, mask = None):
         b, *axis, _, device = *data.shape, data.device
         assert len(axis) == self.input_axis, 'input data must have the right number of axis'
@@ -207,12 +217,18 @@ class Perceiver(nn.Module):
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
+        # rotary embeddings for latents, if specified
+
+        pos_emb = self.sinu_emb(x) if exists(self.sinu_emb) else None
+
+        # layers
+
         for cross_attn, cross_ff, self_attns in self.layers:
             x = cross_attn(x, context = data, mask = mask) + x
             x = cross_ff(x) + x
 
             for self_attn, self_ff in self_attns:
-                x = self_attn(x) + x
+                x = self_attn(x, pos_emb = pos_emb) + x
                 x = self_ff(x) + x
 
         x = x.mean(dim = -2)
