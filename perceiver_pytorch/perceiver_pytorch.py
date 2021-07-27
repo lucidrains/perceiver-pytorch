@@ -149,6 +149,34 @@ class Perceiver(nn.Module):
         self_per_cross_attn = 1,
         self_attn_rel_pos = True
     ):
+        """The shape of the final attention mechanism will be:
+        depth * (cross attention -> self_per_cross_attn * self attention)
+
+        Args:
+          num_freq_bands: Number of freq bands, with original value (2 * K + 1)
+          depth: Depth of net.
+          max_freq: Maximum frequency, hyperparameter depending on how
+              fine the data is.
+          freq_base:
+          input_channels: Number of channels for each token of the input.
+          input_axis: Number of axes for input data (2 for images, 3 for video)
+          num_latents: Number of latents, or induced set points, or centroids.
+              Different papers giving it different names.
+          latent_dim: Latent dimension.
+          cross_heads: Number of heads for cross attention. Paper said 1.
+          latent_heads: Number of heads for latent self attention, 8.
+          cross_dim_head: Number of dimensions per cross attention head.
+          latent_dim_head: Number of dimensions per latent self attention head.
+          num_classes: Output number of classes.
+          attn_dropout:
+          ff_dropout:
+          weight_tie_layers: Whether to weight tie layers (optional).
+          fourier_encode_data: Whether to auto-fourier encode the data, using
+              the input_axis given. defaults to True, but can be turned off
+              if you are fourier encoding the data yourself.
+          self_per_cross_attn: Number of self attention blocks per cross attn.
+          self_attn_rel_pos:
+        """
         super().__init__()
         self.input_axis = input_axis
         self.max_freq = max_freq
