@@ -45,7 +45,7 @@ img = torch.randn(1, 224, 224, 3) # 1 imagenet image, pixelized
 model(img) # (1, 1000)
 ```
 
-For the backbone of Perceiver IO, the follow up paper that allows for flexible number of output sequence length, just import `PerceiverIO` instead
+For the backbone of <a href="https://arxiv.org/abs/2107.14795">Perceiver IO</a>, the follow up paper that allows for flexible number of output sequence length, just import `PerceiverIO` instead
 
 ```python
 import torch
