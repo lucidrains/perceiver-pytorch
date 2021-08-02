@@ -37,13 +37,66 @@ model = Perceiver(
     ff_dropout = 0.,
     weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
     fourier_encode_data = True,  # whether to auto-fourier encode the data, using the input_axis given. defaults to True, but can be turned off if you are fourier encoding the data yourself
-    self_per_cross_attn = 2,     # number of self attention blocks per cross attention
-    self_attn_rel_pos = True
+    self_per_cross_attn = 2      # number of self attention blocks per cross attention
 )
 
 img = torch.randn(1, 224, 224, 3) # 1 imagenet image, pixelized
 
 model(img) # (1, 1000)
+```
+
+For the backbone of Perceiver IO, the follow up paper that allows for flexible number of output sequence length, just import `PerceiverIO` instead
+
+```python
+import torch
+from perceiver_pytorch import PerceiverIO
+
+model = PerceiverIO(
+    dim = 32,                    # dimension of sequence to be encoded
+    queries_dim = 32,            # dimension of decoder queries
+    logits_dim = 100,            # dimension of final logits
+    depth = 6,                   # depth of net
+    num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
+    latent_dim = 512,            # latent dimension
+    cross_heads = 1,             # number of heads for cross attention. paper said 1
+    latent_heads = 8,            # number of heads for latent self attention, 8
+    cross_dim_head = 64,         # number of dimensions per cross attention head
+    latent_dim_head = 64,        # number of dimensions per latent self attention head
+    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
+    self_per_cross_attn = 2,     # number of self attention blocks per cross attention
+)
+
+seq = torch.randn(1, 512, 32)
+queries = torch.randn(1, 128, 32)
+
+logits = model(seq, queries = queries) # (1, 128, 100) - (batch, decoder seq, logits dim)
+```
+
+As an example, using PerceiverIO as a language model
+
+```python
+import torch
+from perceiver_pytorch import PerceiverLM
+
+model = PerceiverLM(
+    num_tokens = 20000,          # number of tokens
+    dim = 32,                    # dimension of sequence to be encoded
+    depth = 6,                   # depth of net
+    max_seq_len = 2048,          # maximum sequence length
+    num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
+    latent_dim = 512,            # latent dimension
+    cross_heads = 1,             # number of heads for cross attention. paper said 1
+    latent_heads = 8,            # number of heads for latent self attention, 8
+    cross_dim_head = 64,         # number of dimensions per cross attention head
+    latent_dim_head = 64,        # number of dimensions per latent self attention head
+    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
+    self_per_cross_attn = 2,     # number of self attention blocks per cross attention
+)
+
+seq = torch.randint(0, 20000, (1, 512))
+mask = torch.ones(1, 512).bool()
+
+logits = model(seq, mask = mask) # (1, 512, 20000)
 ```
 
 ## Experimental
@@ -66,5 +119,16 @@ from perceiver_pytorch.experimental import Perceiver
     eprint  = {2103.03206},
     archivePrefix = {arXiv},
     primaryClass = {cs.CV}
+}
+```
+
+```bibtex
+@misc{jaegle2021perceiver,
+    title   = {Perceiver IO: A General Architecture for Structured Inputs & Outputs},
+    author  = {Andrew Jaegle and Sebastian Borgeaud and Jean-Baptiste Alayrac and Carl Doersch and Catalin Ionescu and David Ding and Skanda Koppula and Andrew Brock and Evan Shelhamer and Olivier Hénaff and Matthew M. Botvinick and Andrew Zisserman and Oriol Vinyals and João Carreira},
+    year    = {2021},
+    eprint  = {2107.14795},
+    archivePrefix = {arXiv},
+    primaryClass = {cs.LG}
 }
 ```

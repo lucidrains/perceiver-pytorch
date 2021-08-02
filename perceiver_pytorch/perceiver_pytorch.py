@@ -7,8 +7,6 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 
-from perceiver_pytorch.rotary import SinusoidalEmbeddings, apply_rotary_emb
-
 # helpers
 
 def exists(val):
@@ -96,7 +94,7 @@ class Attention(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, x, context = None, mask = None, pos_emb = None):
+    def forward(self, x, context = None, mask = None):
         h = self.heads
 
         q = self.to_q(x)
@@ -104,9 +102,6 @@ class Attention(nn.Module):
         k, v = self.to_kv(context).chunk(2, dim = -1)
 
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
-
-        if exists(pos_emb):
-            q, k = apply_rotary_emb(q, k, pos_emb)
 
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
@@ -146,8 +141,7 @@ class Perceiver(nn.Module):
         ff_dropout = 0.,
         weight_tie_layers = False,
         fourier_encode_data = True,
-        self_per_cross_attn = 1,
-        self_attn_rel_pos = True
+        self_per_cross_attn = 1
     ):
         """The shape of the final attention mechanism will be:
         depth * (cross attention -> self_per_cross_attn * self attention)
@@ -157,7 +151,7 @@ class Perceiver(nn.Module):
           depth: Depth of net.
           max_freq: Maximum frequency, hyperparameter depending on how
               fine the data is.
-          freq_base:
+          freq_base: Base for the frequency
           input_channels: Number of channels for each token of the input.
           input_axis: Number of axes for input data (2 for images, 3 for video)
           num_latents: Number of latents, or induced set points, or centroids.
@@ -168,14 +162,13 @@ class Perceiver(nn.Module):
           cross_dim_head: Number of dimensions per cross attention head.
           latent_dim_head: Number of dimensions per latent self attention head.
           num_classes: Output number of classes.
-          attn_dropout:
-          ff_dropout:
+          attn_dropout: Attention dropout
+          ff_dropout: Feedforward dropout
           weight_tie_layers: Whether to weight tie layers (optional).
           fourier_encode_data: Whether to auto-fourier encode the data, using
               the input_axis given. defaults to True, but can be turned off
               if you are fourier encoding the data yourself.
           self_per_cross_attn: Number of self attention blocks per cross attn.
-          self_attn_rel_pos:
         """
         super().__init__()
         self.input_axis = input_axis
@@ -220,10 +213,6 @@ class Perceiver(nn.Module):
             nn.Linear(latent_dim, num_classes)
         )
 
-        self.sinu_emb = None
-        if self_attn_rel_pos:
-            self.sinu_emb = SinusoidalEmbeddings(latent_dim_head)
-
     def forward(self, data, mask = None):
         b, *axis, _, device = *data.shape, data.device
         assert len(axis) == self.input_axis, 'input data must have the right number of axis'
@@ -245,10 +234,6 @@ class Perceiver(nn.Module):
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
-        # rotary embeddings for latents, if specified
-
-        pos_emb = self.sinu_emb(x) if exists(self.sinu_emb) else None
-
         # layers
 
         for cross_attn, cross_ff, self_attns in self.layers:
@@ -256,7 +241,7 @@ class Perceiver(nn.Module):
             x = cross_ff(x) + x
 
             for self_attn, self_ff in self_attns:
-                x = self_attn(x, pos_emb = pos_emb) + x
+                x = self_attn(x) + x
                 x = self_ff(x) + x
 
         x = x.mean(dim = -2)
