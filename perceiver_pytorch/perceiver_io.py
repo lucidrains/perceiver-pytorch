@@ -178,9 +178,6 @@ class PerceiverIO(nn.Module):
         
         latents = self.decoder_cross_attn(queries, context = x)
 
-        if not exists(latents):
-            return latents
-
         # final linear out
 
         return self.to_logits(latents)
