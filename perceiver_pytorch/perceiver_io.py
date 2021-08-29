@@ -149,6 +149,8 @@ class PerceiverIO(nn.Module):
             ]))
 
         self.decoder_cross_attn = PreNorm(queries_dim, Attention(queries_dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = latent_dim)
+        self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim))
+
         self.to_logits = nn.Linear(queries_dim, logits_dim) if exists(logits_dim) else nn.Identity()
 
     def forward(
@@ -177,6 +179,7 @@ class PerceiverIO(nn.Module):
         # cross attend from decoder queries to latents
         
         latents = self.decoder_cross_attn(queries, context = x)
+        latents = self.decoder_ff(latents)
 
         # final linear out
 
