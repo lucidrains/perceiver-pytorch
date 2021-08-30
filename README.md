@@ -62,8 +62,7 @@ model = PerceiverIO(
     latent_heads = 8,            # number of heads for latent self attention, 8
     cross_dim_head = 64,         # number of dimensions per cross attention head
     latent_dim_head = 64,        # number of dimensions per latent self attention head
-    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
-    self_per_cross_attn = 2,     # number of self attention blocks per cross attention
+    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
 seq = torch.randn(1, 512, 32)
@@ -89,8 +88,7 @@ model = PerceiverLM(
     latent_heads = 8,            # number of heads for latent self attention, 8
     cross_dim_head = 64,         # number of dimensions per cross attention head
     latent_dim_head = 64,        # number of dimensions per latent self attention head
-    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
-    self_per_cross_attn = 2,     # number of self attention blocks per cross attention
+    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
 )
 
 seq = torch.randint(0, 20000, (1, 512))
