@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'perceiver-pytorch',
   packages = find_packages(),
-  version = '0.6.1',
+  version = '0.6.2',
   license='MIT',
   description = 'Perceiver - Pytorch',
   author = 'Phil Wang',

@@ -117,7 +117,8 @@ class PerceiverIO(nn.Module):
         cross_dim_head = 64,
         latent_dim_head = 64,
         weight_tie_layers = False,
-        self_per_cross_attn = 1
+        self_per_cross_attn = 1,
+        decoder_ff = False
     ):
         super().__init__()
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
@@ -149,6 +150,8 @@ class PerceiverIO(nn.Module):
             ]))
 
         self.decoder_cross_attn = PreNorm(queries_dim, Attention(queries_dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = latent_dim)
+        self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim)) if decoder_ff else None
+
         self.to_logits = nn.Linear(queries_dim, logits_dim) if exists(logits_dim) else nn.Identity()
 
     def forward(
@@ -177,6 +180,11 @@ class PerceiverIO(nn.Module):
         # cross attend from decoder queries to latents
         
         latents = self.decoder_cross_attn(queries, context = x)
+
+        # optional decoder feedforward
+
+        if exists(self.decoder_ff):
+            latents = latents + self.decoder_ff(latents)
 
         # final linear out
 
