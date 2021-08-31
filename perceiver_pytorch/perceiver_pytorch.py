@@ -7,8 +7,6 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 
-from perceiver_pytorch.rotary import SinusoidalEmbeddings, apply_rotary_emb
-
 # helpers
 
 
@@ -182,7 +180,7 @@ class Perceiver(nn.Module):
           depth: Depth of net.
           max_freq: Maximum frequency, hyperparameter depending on how
               fine the data is.
-          freq_base:
+          freq_base: Base for the frequency
           input_channels: Number of channels for each token of the input.
           input_axis: Number of axes for input data (2 for images, 3 for video)
           num_latents: Number of latents, or induced set points, or centroids.
@@ -193,14 +191,13 @@ class Perceiver(nn.Module):
           cross_dim_head: Number of dimensions per cross attention head.
           latent_dim_head: Number of dimensions per latent self attention head.
           num_classes: Output number of classes.
-          attn_dropout:
-          ff_dropout:
+          attn_dropout: Attention dropout
+          ff_dropout: Feedforward dropout
           weight_tie_layers: Whether to weight tie layers (optional).
           fourier_encode_data: Whether to auto-fourier encode the data, using
               the input_axis given. defaults to True, but can be turned off
               if you are fourier encoding the data yourself.
           self_per_cross_attn: Number of self attention blocks per cross attn.
-          self_attn_rel_pos:
         """
         super().__init__()
         self.input_axis = input_axis
