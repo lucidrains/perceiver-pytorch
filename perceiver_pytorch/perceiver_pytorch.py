@@ -6,6 +6,7 @@ from torch import nn, einsum
 import torch.nn.functional as F
 
 from einops import rearrange, repeat
+from einops.layers.torch import Reduce
 
 # helpers
 
@@ -141,7 +142,8 @@ class Perceiver(nn.Module):
         ff_dropout = 0.,
         weight_tie_layers = False,
         fourier_encode_data = True,
-        self_per_cross_attn = 1
+        self_per_cross_attn = 1,
+        final_classifier_head = True
     ):
         """The shape of the final attention mechanism will be:
         depth * (cross attention -> self_per_cross_attn * self attention)
@@ -169,6 +171,7 @@ class Perceiver(nn.Module):
               the input_axis given. defaults to True, but can be turned off
               if you are fourier encoding the data yourself.
           self_per_cross_attn: Number of self attention blocks per cross attn.
+          final_classifier_head: mean pool and project embeddings to number of classes (num_classes) at the end
         """
         super().__init__()
         self.input_axis = input_axis
@@ -209,11 +212,17 @@ class Perceiver(nn.Module):
             ]))
 
         self.to_logits = nn.Sequential(
+            Reduce('b n d -> b d', 'mean'),
             nn.LayerNorm(latent_dim),
             nn.Linear(latent_dim, num_classes)
-        )
+        ) if final_classifier_head else nn.Identity()
 
-    def forward(self, data, mask = None):
+    def forward(
+        self,
+        data,
+        mask = None,
+        return_embeddings = False
+    ):
         b, *axis, _, device = *data.shape, data.device
         assert len(axis) == self.input_axis, 'input data must have the right number of axis'
 
@@ -244,5 +253,11 @@ class Perceiver(nn.Module):
                 x = self_attn(x) + x
                 x = self_ff(x) + x
 
-        x = x.mean(dim = -2)
+        # allow for fetching embeddings
+
+        if return_embeddings:
+            return x
+
+        # to logits
+
         return self.to_logits(x)
