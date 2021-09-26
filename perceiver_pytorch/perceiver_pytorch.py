@@ -29,11 +29,11 @@ def cache_fn(f):
         return cache
     return cached_fn
 
-def fourier_encode(x, max_freq, num_bands = 4, base = 2):
+def fourier_encode(x, max_freq, num_bands = 4):
     x = x.unsqueeze(-1)
     device, dtype, orig_x = x.device, x.dtype, x
 
-    scales = torch.logspace(0., log(max_freq / 2) / log(base), num_bands, base = base, device = device, dtype = dtype)
+    scales = torch.logspace(0., log(max_freq / 2) / log(10), num_bands, device = device, dtype = dtype)
     scales = scales[(*((None,) * (len(x.shape) - 1)), Ellipsis)]
 
     x = x * scales * pi
@@ -128,7 +128,6 @@ class Perceiver(nn.Module):
         num_freq_bands,
         depth,
         max_freq,
-        freq_base = 2,
         input_channels = 3,
         input_axis = 2,
         num_latents = 512,
@@ -177,7 +176,6 @@ class Perceiver(nn.Module):
         self.input_axis = input_axis
         self.max_freq = max_freq
         self.num_freq_bands = num_freq_bands
-        self.freq_base = freq_base
 
         self.fourier_encode_data = fourier_encode_data
         fourier_channels = (input_axis * ((num_freq_bands * 2) + 1)) if fourier_encode_data else 0
@@ -231,7 +229,7 @@ class Perceiver(nn.Module):
 
             axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
             pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
-            enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands, base = self.freq_base)
+            enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands)
             enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
             enc_pos = repeat(enc_pos, '... -> b ...', b = b)
 

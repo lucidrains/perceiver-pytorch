@@ -23,7 +23,6 @@ model = Perceiver(
     input_axis = 2,              # number of axis for input data (2 for images, 3 for video)
     num_freq_bands = 6,          # number of freq bands, with original value (2 * K + 1)
     max_freq = 10.,              # maximum frequency, hyperparameter depending on how fine the data is
-    freq_base = 2,
     depth = 6,                   # depth of net. The shape of the final attention mechanism will be:
                                  #   depth * (cross attention -> self_per_cross_attn * self attention)
     num_latents = 256,           # number of latents, or induced set points, or centroids. different papers giving it different names
