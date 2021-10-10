@@ -65,7 +65,7 @@ model = PerceiverIO(
 )
 
 seq = torch.randn(1, 512, 32)
-queries = torch.randn(1, 128, 32)
+queries = torch.randn(128, 32)
 
 logits = model(seq, queries = queries) # (1, 128, 100) - (batch, decoder seq, logits dim)
 ```

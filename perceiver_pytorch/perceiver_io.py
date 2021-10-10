@@ -171,6 +171,11 @@ class PerceiverIO(nn.Module):
         if not exists(queries):
             return x
 
+        # make sure queries contains batch dimension
+
+        if queries.ndim == 2:
+            queries = repeat(queries, 'n d -> b n d', b = b)
+
         # cross attend from decoder queries to latents
         
         latents = self.decoder_cross_attn(queries, context = x)
