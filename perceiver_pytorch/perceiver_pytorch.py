@@ -71,8 +71,8 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(dim, dim * mult * 2),
             GEGLU(),
-            nn.Dropout(dropout),
-            nn.Linear(dim * mult, dim)
+            nn.Linear(dim * mult, dim),
+            nn.Dropout(dropout)
         )
 
     def forward(self, x):
@@ -90,10 +90,8 @@ class Attention(nn.Module):
         self.to_q = nn.Linear(query_dim, inner_dim, bias = False)
         self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias = False)
 
-        self.to_out = nn.Sequential(
-            nn.Linear(inner_dim, query_dim),
-            nn.Dropout(dropout)
-        )
+        self.dropout = nn.Dropout(dropout)
+        self.to_out = nn.Linear(inner_dim, query_dim)
 
     def forward(self, x, context = None, mask = None):
         h = self.heads
@@ -114,6 +112,7 @@ class Attention(nn.Module):
 
         # attention, what we cannot get enough of
         attn = sim.softmax(dim = -1)
+        attn = self.dropout(attn)
 
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
@@ -228,7 +227,7 @@ class Perceiver(nn.Module):
             # calculate fourier encoded positions in the range of [-1, 1], for all axis
 
             axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
-            pos = torch.stack(torch.meshgrid(*axis_pos), dim = -1)
+            pos = torch.stack(torch.meshgrid(*axis_pos, indexing = 'ij'), dim = -1)
             enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands)
             enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
             enc_pos = repeat(enc_pos, '... -> b ...', b = b)
