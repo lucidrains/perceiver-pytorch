@@ -17,16 +17,17 @@ def default(val, d):
     return val if exists(val) else d
 
 def cache_fn(f):
-    cache = None
+    cache = dict()
     @wraps(f)
-    def cached_fn(*args, _cache = True, **kwargs):
+    def cached_fn(*args, _cache = True, key = None, **kwargs):
         if not _cache:
             return f(*args, **kwargs)
         nonlocal cache
-        if cache is not None:
-            return cache
-        cache = f(*args, **kwargs)
-        return cache
+        if key in cache:
+            return cache[key]
+        result = f(*args, **kwargs)
+        cache[key] = result
+        return result
     return cached_fn
 
 def fourier_encode(x, max_freq, num_bands = 4):
@@ -196,10 +197,10 @@ class Perceiver(nn.Module):
 
             self_attns = nn.ModuleList([])
 
-            for _ in range(self_per_cross_attn):
+            for block_ind in range(self_per_cross_attn):
                 self_attns.append(nn.ModuleList([
-                    get_latent_attn(**cache_args),
-                    get_latent_ff(**cache_args)
+                    get_latent_attn(**cache_args, key = block_ind),
+                    get_latent_ff(**cache_args, key = block_ind)
                 ]))
 
             self.layers.append(nn.ModuleList([
