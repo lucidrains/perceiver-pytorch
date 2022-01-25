@@ -107,7 +107,7 @@ class Perceiver(nn.Module):
             ]))
 
         self.to_logits = nn.Sequential(
-            RMSNorm(latent_dim),
+            nn.LayerNorm(latent_dim),
             nn.Linear(latent_dim, num_classes)
         )
 
