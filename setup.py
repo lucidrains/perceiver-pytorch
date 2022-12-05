@@ -3,9 +3,10 @@ from setuptools import setup, find_packages
 setup(
   name = 'perceiver-pytorch',
   packages = find_packages(),
-  version = '0.8.3',
+  version = '0.8.5',
   license='MIT',
   description = 'Perceiver - Pytorch',
+  long_description_content_type = 'text/markdown',
   author = 'Phil Wang',
   author_email = 'lucidrains@gmail.com',
   url = 'https://github.com/lucidrains/perceiver-pytorch',
