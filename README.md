@@ -61,7 +61,8 @@ model = PerceiverIO(
     latent_heads = 8,            # number of heads for latent self attention, 8
     cross_dim_head = 64,         # number of dimensions per cross attention head
     latent_dim_head = 64,        # number of dimensions per latent self attention head
-    weight_tie_layers = False    # whether to weight tie layers (optional, as indicated in the diagram)
+    weight_tie_layers = False,   # whether to weight tie layers (optional, as indicated in the diagram)
+    seq_dropout_prob = 0.2       # fraction of the tokens from the input sequence to dropout (structured dropout, for saving compute and regularizing effects)
 )
 
 seq = torch.randn(1, 512, 32)

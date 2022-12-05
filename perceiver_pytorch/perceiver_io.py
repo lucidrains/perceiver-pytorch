@@ -28,6 +28,28 @@ def cache_fn(f):
         return cache
     return cached_fn
 
+# structured dropout, more effective than traditional attention dropouts
+
+def dropout_seq(seq, mask, dropout):
+    b, n, *_, device = *seq.shape, seq.device
+    logits = torch.randn(b, n, device = device)
+
+    if exists(mask):
+        logits = logits.masked_fill(~mask, -torch.finfo(logits.dtype).max)
+
+    num_keep = max(1,  int((1 - dropout) * n))
+    keep_indices = logits.topk(num_keep, dim = 1).indices
+
+    batch_indices = torch.arange(b, device = device)
+    batch_indices = rearrange(batch_indices, 'b -> b 1')
+
+    seq = seq[batch_indices, keep_indices]
+
+    if exists(mask):
+        mask = mask[batch_indices, keep_indices]
+
+    return seq, mask
+
 # helper classes
 
 class PreNorm(nn.Module):
@@ -117,9 +139,12 @@ class PerceiverIO(nn.Module):
         cross_dim_head = 64,
         latent_dim_head = 64,
         weight_tie_layers = False,
-        decoder_ff = False
+        decoder_ff = False,
+        seq_dropout_prob = 0.
     ):
         super().__init__()
+        self.seq_dropout_prob = seq_dropout_prob
+
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
         self.cross_attend_blocks = nn.ModuleList([
@@ -157,6 +182,11 @@ class PerceiverIO(nn.Module):
 
         cross_attn, cross_ff = self.cross_attend_blocks
 
+        # structured dropout (as done in perceiver AR https://arxiv.org/abs/2202.07765)
+
+        if self.training and self.seq_dropout_prob > 0.:
+            data, mask = dropout_seq(data, mask, self.seq_dropout_prob)
+            print(data.shape, mask.shape)
         # cross attention only happens once for Perceiver IO
 
         x = cross_attn(x, context = data, mask = mask) + x
