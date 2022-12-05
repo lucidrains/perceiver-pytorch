@@ -37,7 +37,8 @@ def dropout_seq(seq, mask, dropout):
     if exists(mask):
         logits = logits.masked_fill(~mask, -torch.finfo(logits.dtype).max)
 
-    num_keep = max(1,  int((1 - dropout) * n))
+    keep_prob = 1. - dropout
+    num_keep = max(1,  int(keep_prob * n))
     keep_indices = logits.topk(num_keep, dim = 1).indices
 
     batch_indices = torch.arange(b, device = device)
@@ -46,7 +47,11 @@ def dropout_seq(seq, mask, dropout):
     seq = seq[batch_indices, keep_indices]
 
     if exists(mask):
-        mask = mask[batch_indices, keep_indices]
+        seq_counts = mask.sum(dim = -1)
+        seq_keep_counts = torch.ceil(seq_counts * keep_prob).int()
+        keep_mask = torch.arange(num_keep, device = device) < rearrange(seq_keep_counts, 'b -> b 1')
+
+        mask = mask[batch_indices, keep_indices] & keep_mask
 
     return seq, mask
 
