@@ -25,7 +25,6 @@ class Perceiver(nn.Module):
         num_freq_bands,
         depth,
         max_freq,
-        freq_base = 2,
         input_channels = 3,
         input_axis = 2,
         num_latents = 512,
@@ -44,7 +43,6 @@ class Perceiver(nn.Module):
         self.input_axis = input_axis
         self.max_freq = max_freq
         self.num_freq_bands = num_freq_bands
-        self.freq_base = freq_base
 
         input_dim = input_axis * ((num_freq_bands * 2) + 1) + input_channels
 
@@ -82,7 +80,7 @@ class Perceiver(nn.Module):
 
         axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps = size, device = device), axis))
         pos = torch.stack(torch.meshgrid(*axis_pos, indexing = 'ij'), dim = -1)
-        enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands, base = self.freq_base)
+        enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands)
         enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
         enc_pos = repeat(enc_pos, '... -> b ...', b = b)
 
