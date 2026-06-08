@@ -1,8 +1,10 @@
+from __future__ import annotations
 from math import pi, log
 from functools import wraps
 
 import torch
-from torch import nn, einsum
+from torch import nn, einsum, stack, cat
+from torch.nn import Module, ModuleList
 import torch.nn.functional as F
 
 from einops import rearrange, repeat
@@ -15,6 +17,9 @@ def exists(val):
 
 def default(val, d):
     return val if exists(val) else d
+
+def l1norm(t, dim = -1, eps = 1e-8):
+    return F.normalize(t, p = 1, dim = dim, eps = eps)
 
 def cache_fn(f):
     cache = dict()
@@ -31,15 +36,15 @@ def cache_fn(f):
     return cached_fn
 
 def fourier_encode(x, max_freq, num_bands = 4):
-    x = x.unsqueeze(-1)
+    x = rearrange(x, '... -> ... 1')
     device, dtype, orig_x = x.device, x.dtype, x
 
     scales = torch.linspace(1., max_freq / 2, num_bands, device = device, dtype = dtype)
     scales = scales[(*((None,) * (len(x.shape) - 1)), Ellipsis)]
 
     x = x * scales * pi
-    x = torch.cat([x.sin(), x.cos()], dim = -1)
-    x = torch.cat((x, orig_x), dim = -1)
+    x = cat([x.sin(), x.cos()], dim = -1)
+    x = cat((x, orig_x), dim = -1)
     return x
 
 # helper classes
@@ -61,12 +66,12 @@ class PreNorm(nn.Module):
 
         return self.fn(x, **kwargs)
 
-class GEGLU(nn.Module):
+class GEGLU(Module):
     def forward(self, x):
         x, gates = x.chunk(2, dim = -1)
         return x * F.gelu(gates)
 
-class FeedForward(nn.Module):
+class FeedForward(Module):
     def __init__(self, dim, mult = 4, dropout = 0.):
         super().__init__()
         self.net = nn.Sequential(
@@ -94,14 +99,14 @@ class Attention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.to_out = nn.Linear(inner_dim, query_dim)
 
-    def forward(self, x, context = None, mask = None):
+    def forward(self, x, context = None, mask = None, inverted_attention = False):
         h = self.heads
 
         q = self.to_q(x)
         context = default(context, x)
         k, v = self.to_kv(context).chunk(2, dim = -1)
 
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h = h), (q, k, v))
+        q, k, v = (rearrange(t, 'b n (h d) -> (b h) n d', h = h) for t in (q, k, v))
 
         sim = einsum('b i d, b j d -> b i j', q, k) * self.scale
 
@@ -112,8 +117,20 @@ class Attention(nn.Module):
             sim.masked_fill_(~mask, max_neg_value)
 
         # attention, what we cannot get enough of
-        attn = sim.softmax(dim = -1)
+
+        if inverted_attention:
+            attn = sim.softmax(dim = -2)
+
+            if exists(mask):
+                attn = attn.masked_fill(~mask, 0.)
+
+            attn = l1norm(attn)
+        else:
+            attn = sim.softmax(dim = -1)
+
         attn = self.dropout(attn)
+
+        # aggregate
 
         out = einsum('b i j, b j d -> b i d', attn, v)
         out = rearrange(out, '(b h) n d -> b n (h d)', h = h)
@@ -142,7 +159,8 @@ class Perceiver(nn.Module):
         weight_tie_layers = False,
         fourier_encode_data = True,
         self_per_cross_attn = 1,
-        final_classifier_head = True
+        final_classifier_head = True,
+        inverted_cross_attn: bool | tuple[bool, ...] = False
     ):
         """The shape of the final attention mechanism will be:
         depth * (cross attention -> self_per_cross_attn * self attention)
@@ -177,6 +195,18 @@ class Perceiver(nn.Module):
         self.max_freq = max_freq
         self.num_freq_bands = num_freq_bands
 
+        # inverted attention
+        # slot attention: https://arxiv.org/abs/2006.15055
+        # inverted attention: https://openreview.net/forum?id=3H8j14mA3X
+
+        if isinstance(inverted_cross_attn, bool):
+            inverted_cross_attn = (inverted_cross_attn,) * depth
+
+        assert len(inverted_cross_attn) == depth, f'inverted_cross_attn tuple must have length of depth ({depth})'
+        self.inverted_cross_attn = inverted_cross_attn
+
+        # fourier
+
         self.fourier_encode_data = fourier_encode_data
         fourier_channels = (input_axis * ((num_freq_bands * 2) + 1)) if fourier_encode_data else 0
         input_dim = fourier_channels + input_channels
@@ -188,22 +218,22 @@ class Perceiver(nn.Module):
         get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout))
         get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
 
-        get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = map(cache_fn, (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
+        get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff = (cache_fn(fn) for fn in (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff))
 
-        self.layers = nn.ModuleList([])
+        self.layers = ModuleList([])
         for i in range(depth):
             should_cache = i > 0 and weight_tie_layers
             cache_args = {'_cache': should_cache}
 
-            self_attns = nn.ModuleList([])
+            self_attns = ModuleList([])
 
             for block_ind in range(self_per_cross_attn):
-                self_attns.append(nn.ModuleList([
+                self_attns.append(ModuleList([
                     get_latent_attn(**cache_args, key = block_ind),
                     get_latent_ff(**cache_args, key = block_ind)
                 ]))
 
-            self.layers.append(nn.ModuleList([
+            self.layers.append(ModuleList([
                 get_cross_attn(**cache_args),
                 get_cross_ff(**cache_args),
                 self_attns
@@ -227,13 +257,13 @@ class Perceiver(nn.Module):
         if self.fourier_encode_data:
             # calculate fourier encoded positions in the range of [-1, 1], for all axis
 
-            axis_pos = list(map(lambda size: torch.linspace(-1., 1., steps=size, device=device, dtype=dtype), axis))
-            pos = torch.stack(torch.meshgrid(*axis_pos, indexing = 'ij'), dim = -1)
+            axis_pos = [torch.linspace(-1., 1., steps = size, device = device, dtype = dtype) for size in axis]
+            pos = stack(torch.meshgrid(*axis_pos, indexing = 'ij'), dim = -1)
             enc_pos = fourier_encode(pos, self.max_freq, self.num_freq_bands)
             enc_pos = rearrange(enc_pos, '... n d -> ... (n d)')
             enc_pos = repeat(enc_pos, '... -> b ...', b = b)
 
-            data = torch.cat((data, enc_pos), dim = -1)
+            data = cat((data, enc_pos), dim = -1)
 
         # concat to channels of data and flatten axis
 
@@ -243,8 +273,8 @@ class Perceiver(nn.Module):
 
         # layers
 
-        for cross_attn, cross_ff, self_attns in self.layers:
-            x = cross_attn(x, context = data, mask = mask) + x
+        for i, (cross_attn, cross_ff, self_attns) in enumerate(self.layers):
+            x = cross_attn(x, context = data, mask = mask, inverted_attention = self.inverted_cross_attn[i]) + x
             x = cross_ff(x) + x
 
             for self_attn, self_ff in self_attns:

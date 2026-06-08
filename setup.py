@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
   name = 'perceiver-pytorch',
   packages = find_packages(),
-  version = '0.8.8',
+  version = '0.9.0',
   license='MIT',
   description = 'Perceiver - Pytorch',
   long_description_content_type = 'text/markdown',
@@ -17,8 +17,8 @@ setup(
     'attention mechanism'
   ],
   install_requires=[
-    'einops>=0.3',
-    'torch>=1.6'
+    'einops>=0.8.0',
+    'torch>=2.5'
   ],
   classifiers=[
     'Development Status :: 4 - Beta',
