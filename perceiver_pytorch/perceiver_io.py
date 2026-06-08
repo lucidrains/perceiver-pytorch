@@ -212,7 +212,7 @@ class PerceiverIO(nn.Module):
             queries = repeat(queries, 'n d -> b n d', b = b)
 
         # cross attend from decoder queries to latents
-        
+
         latents = self.decoder_cross_attn(queries, context = x)
 
         # optional decoder feedforward
