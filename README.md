@@ -130,3 +130,13 @@ from perceiver_pytorch.experimental import Perceiver
     primaryClass = {cs.LG}
 }
 ```
+
+```bibtex
+@inproceedings{wu2023invertedattention,
+    title   = {Inverted-Attention Transformers can Learn Object Representations: Insights from Slot Attention},
+    author  = {Yi-Fu Wu and Klaus Greff and Gamaleldin Fathy Elsayed and Michael Curtis Mozer and Thomas Kipf and Sjoerd van Steenkiste},
+    booktitle = {UniReps:  the First Workshop on Unifying Representations in Neural Models},
+    year    = {2023},
+    url     = {https://openreview.net/forum?id=WgQZNoQ5AB}
+}
+```
