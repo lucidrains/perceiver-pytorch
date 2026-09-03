@@ -229,8 +229,12 @@ class Perceiver(nn.Module):
 
             for block_ind in range(self_per_cross_attn):
                 self_attns.append(ModuleList([
-                    get_latent_attn(**cache_args, key = block_ind),
-                    get_latent_ff(**cache_args, key = block_ind)
+                    # The paper ties every latent transformer block across
+                    # depth.  The cross-attention stack intentionally keeps
+                    # its first block separate, but latent self-attention
+                    # should also use the cached module in layer zero.
+                    get_latent_attn(_cache = weight_tie_layers, key = block_ind),
+                    get_latent_ff(_cache = weight_tie_layers, key = block_ind)
                 ]))
 
             self.layers.append(ModuleList([
