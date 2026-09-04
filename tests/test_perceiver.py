@@ -59,3 +59,36 @@ def test_perceiver_io(attn_residual, inverted_cross_attn):
     out = model(seq, queries = queries)
 
     assert out.shape == (1, 16, 10), 'output shape must be correct'
+
+@pytest.mark.parametrize('module_path', [
+    'perceiver_pytorch.gated',
+    'perceiver_pytorch.mixed_latents',
+])
+@pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16])
+def test_perceiver_variants_preserve_low_precision(module_path, dtype):
+    import importlib
+
+    Perceiver = importlib.import_module(module_path).Perceiver
+
+    model = Perceiver(
+        input_channels = 3,
+        input_axis = 2,
+        num_freq_bands = 3,
+        max_freq = 5.,
+        depth = 2,
+        num_latents = 16,
+        latent_dim = 16,
+        cross_heads = 1,
+        latent_heads = 2,
+        cross_dim_head = 8,
+        latent_dim_head = 8,
+        num_classes = 10,
+        attn_dropout = 0.,
+        ff_dropout = 0.
+    ).to(dtype)
+
+    img = torch.randn(1, 32, 32, 3, dtype = dtype)
+    out = model(img)
+
+    assert out.shape == (1, 10), 'output shape must be correct'
+    assert out.dtype == dtype, 'a low-precision input must not be upcast by the fourier position grid'
