@@ -1,8 +1,71 @@
-import torch
 import pytest
-from perceiver_pytorch import Perceiver, PerceiverIO
+import torch
+
+from perceiver_pytorch import Perceiver, PerceiverBlock, PerceiverIO
 
 param = pytest.mark.parametrize
+
+def test_perceiver_block():
+    block = PerceiverBlock(
+        dim = 16,
+        context_dim = 16,
+        cross_heads = 2,
+        latent_heads = 4,
+        cross_dim_head = 8,
+        latent_dim_head = 8,
+        self_per_cross_attn = 2
+    )
+
+    latents = torch.randn(2, 9, 16)
+    data = torch.randn(2, 30, 16)
+
+    mask = torch.ones(2, 30, dtype = torch.bool)
+    mask[1, 20:] = False
+
+    out = block(latents, context = data, mask = mask)
+    assert out.shape == (2, 9, 16)
+
+    # masked data must not affect the latents
+
+    changed_data = data.clone()
+    changed_data[1, 20:] += 100.
+
+    changed_out = block(latents, context = changed_data, mask = mask)
+    assert torch.allclose(out, changed_out)
+
+    # self attention only
+
+    self_block = PerceiverBlock(dim = 16, has_cross_attn = False)
+
+    self_out = self_block(latents)
+    assert self_out.shape == (2, 9, 16)
+
+def test_perceiver_block_queries_contribute_kv():
+    block = PerceiverBlock(
+        dim = 16,
+        context_dim = 16,
+        cross_heads = 2,
+        latent_heads = 4,
+        cross_dim_head = 8,
+        latent_dim_head = 8,
+        queries_contribute_kv = True
+    )
+
+    latents = torch.randn(2, 9, 16)
+    data = torch.randn(2, 30, 16)
+    mask = torch.zeros(2, 30, dtype = torch.bool)
+
+    out = block(latents, context = data, mask = mask)
+    assert torch.isfinite(out).all()
+
+    # queries are the only valid keys / values
+
+    changed_data = data + 100.
+    changed_out = block(latents, context = changed_data, mask = mask)
+    assert torch.allclose(out, changed_out)
+
+    with pytest.raises(AssertionError):
+        PerceiverBlock(dim = 16, context_dim = 8, queries_contribute_kv = True)
 
 @param('attn_residual', (False, True))
 @param('inverted_cross_attn', [

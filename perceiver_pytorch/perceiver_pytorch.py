@@ -89,13 +89,25 @@ class FeedForward(Module):
         return self.net(x)
 
 class Attention(nn.Module):
-    def __init__(self, query_dim, context_dim = None, heads = 8, dim_head = 64, dropout = 0.):
+    def __init__(
+        self,
+        query_dim,
+        context_dim = None,
+        heads = 8,
+        dim_head = 64,
+        dropout = 0.,
+        queries_contribute_kv = False
+    ):
         super().__init__()
         inner_dim = dim_head * heads
         context_dim = default(context_dim, query_dim)
 
+        if queries_contribute_kv:
+            assert context_dim == query_dim, 'queries_contribute_kv requires context_dim to equal query_dim'
+
         self.scale = dim_head ** -0.5
         self.heads = heads
+        self.queries_contribute_kv = queries_contribute_kv
 
         self.to_q = nn.Linear(query_dim, inner_dim, bias = False)
         self.to_kv = nn.Linear(context_dim, inner_dim * 2, bias = False)
@@ -107,8 +119,19 @@ class Attention(nn.Module):
         h = self.heads
 
         q = self.to_q(x)
+        has_context = exists(context)
         context = default(context, x)
-        k, v = self.to_kv(context).chunk(2, dim = -1)
+
+        if self.queries_contribute_kv and has_context:
+            # queries join the key / value set
+            kv = cat((x, context), dim = 1)
+
+            if exists(mask):
+                mask = cat((mask.new_ones(mask.shape[0], x.shape[1]), mask), dim = -1)
+        else:
+            kv = context
+
+        k, v = self.to_kv(kv).chunk(2, dim = -1)
 
         q, k, v = (rearrange(t, 'b n (h d) -> (b h) n d', h = h) for t in (q, k, v))
 
@@ -169,6 +192,71 @@ class EnformerAttentionResidual(Module):
         attn = logits.softmax(dim = -2)
 
         return einsum(past_layers, attn, 'b n l d, b n l d -> b n d')
+
+# block
+
+class PerceiverBlock(Module):
+    def __init__(
+        self,
+        *,
+        dim,
+        context_dim = None,
+        cross_heads = 1,
+        latent_heads = 8,
+        cross_dim_head = 64,
+        latent_dim_head = 64,
+        self_per_cross_attn = 1,
+        attn_dropout = 0.,
+        ff_dropout = 0.,
+        has_cross_attn = True,
+        queries_contribute_kv = False
+    ):
+        super().__init__()
+        self.has_cross_attn = has_cross_attn
+
+        if has_cross_attn:
+            context_dim = default(context_dim, dim)
+            self.cross_attn = PreNorm(
+                dim,
+                Attention(
+                    dim,
+                    context_dim,
+                    heads = cross_heads,
+                    dim_head = cross_dim_head,
+                    dropout = attn_dropout,
+                    queries_contribute_kv = queries_contribute_kv
+                ),
+                context_dim = context_dim
+            )
+            self.cross_ff = PreNorm(dim, FeedForward(dim, dropout = ff_dropout))
+        else:
+            self.cross_attn = None
+            self.cross_ff = None
+
+        self.self_attns = ModuleList([])
+
+        for _ in range(self_per_cross_attn):
+            self.self_attns.append(ModuleList([
+                PreNorm(dim, Attention(dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout)),
+                PreNorm(dim, FeedForward(dim, dropout = ff_dropout))
+            ]))
+
+    def forward(
+        self,
+        x,
+        context = None,
+        mask = None,
+        inverted_attention = False
+    ):
+        if self.has_cross_attn:
+            x = self.cross_attn(x, context = context, mask = mask, inverted_attention = inverted_attention) + x
+            x = self.cross_ff(x) + x
+
+        for self_attn, self_ff in self.self_attns:
+            x = self_attn(x) + x
+            x = self_ff(x) + x
+
+        return x
 
 # main class
 
@@ -251,33 +339,28 @@ class Perceiver(nn.Module):
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
-        get_cross_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, input_dim, heads = cross_heads, dim_head = cross_dim_head, dropout = attn_dropout), context_dim = input_dim)
-        get_cross_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
-        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head, dropout = attn_dropout))
-        get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim, dropout = ff_dropout))
+        get_block = lambda: PerceiverBlock(
+            dim = latent_dim,
+            context_dim = input_dim,
+            cross_heads = cross_heads,
+            latent_heads = latent_heads,
+            cross_dim_head = cross_dim_head,
+            latent_dim_head = latent_dim_head,
+            self_per_cross_attn = self_per_cross_attn,
+            attn_dropout = attn_dropout,
+            ff_dropout = ff_dropout
+        )
         get_attn_residual = lambda: (EnformerAttentionResidual(latent_dim, rank = attn_residual_rank) if attn_residual else None)
 
-        get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff, get_attn_residual = (cache_fn(fn) for fn in (get_cross_attn, get_cross_ff, get_latent_attn, get_latent_ff, get_attn_residual))
+        get_block, get_attn_residual = map(cache_fn, (get_block, get_attn_residual))
 
         self.layers = ModuleList([])
+        self.attn_residuals = ModuleList([])
+
         for i in range(depth):
-            should_cache = i > 0 and weight_tie_layers
-            cache_args = {'_cache': should_cache}
-
-            self_attns = ModuleList([])
-
-            for block_ind in range(self_per_cross_attn):
-                self_attns.append(ModuleList([
-                    get_latent_attn(**cache_args, key = block_ind),
-                    get_latent_ff(**cache_args, key = block_ind)
-                ]))
-
-            self.layers.append(ModuleList([
-                get_cross_attn(**cache_args),
-                get_cross_ff(**cache_args),
-                self_attns,
-                get_attn_residual(**cache_args)
-            ]))
+            cache_args = {'_cache': i > 0 and weight_tie_layers}
+            self.layers.append(get_block(**cache_args))
+            self.attn_residuals.append(get_attn_residual(**cache_args))
 
         self.to_logits = nn.Sequential(
             Reduce('b n d -> b d', 'mean'),
@@ -322,13 +405,13 @@ class Perceiver(nn.Module):
 
         # layers
 
-        for i, (cross_attn, cross_ff, self_attns, attn_residual) in enumerate(self.layers):
-            x = cross_attn(x, context = data, mask = mask, inverted_attention = self.inverted_cross_attn[i]) + x
-            x = cross_ff(x) + x
-
-            for self_attn, self_ff in self_attns:
-                x = self_attn(x) + x
-                x = self_ff(x) + x
+        for i, (block, attn_residual) in enumerate(zip(self.layers, self.attn_residuals)):
+            x = block(
+                x,
+                context = data,
+                mask = mask,
+                inverted_attention = self.inverted_cross_attn[i]
+            )
 
             # keep the hidden states for the attention residual
 

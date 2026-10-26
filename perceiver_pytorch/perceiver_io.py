@@ -8,6 +8,8 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 
+from perceiver_pytorch.perceiver_pytorch import PerceiverBlock
+
 # helpers
 
 def exists(val):
@@ -202,29 +204,38 @@ class PerceiverIO(nn.Module):
 
         self.latents = nn.Parameter(torch.randn(num_latents, latent_dim))
 
-        self.cross_attend_blocks = nn.ModuleList([
-            PreNorm(latent_dim, Attention(latent_dim, dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = dim),
-            PreNorm(latent_dim, FeedForward(latent_dim))
-        ])
+        self.cross_attend_block = PerceiverBlock(
+            dim = latent_dim,
+            context_dim = dim,
+            cross_heads = cross_heads,
+            latent_heads = latent_heads,
+            cross_dim_head = cross_dim_head,
+            latent_dim_head = latent_dim_head,
+            self_per_cross_attn = 0
+        )
 
         self.has_attn_residual = attn_residual
         self.inverted_cross_attn = inverted_cross_attn
 
-        get_latent_attn = lambda: PreNorm(latent_dim, Attention(latent_dim, heads = latent_heads, dim_head = latent_dim_head))
-        get_latent_ff = lambda: PreNorm(latent_dim, FeedForward(latent_dim))
+        get_latent_block = lambda: PerceiverBlock(
+            dim = latent_dim,
+            cross_heads = cross_heads,
+            latent_heads = latent_heads,
+            cross_dim_head = cross_dim_head,
+            latent_dim_head = latent_dim_head,
+            has_cross_attn = False
+        )
         get_attn_residual = lambda: (EnformerAttentionResidual(latent_dim, rank = attn_residual_rank) if attn_residual else None)
 
-        get_latent_attn, get_latent_ff, get_attn_residual = map(cache_fn, (get_latent_attn, get_latent_ff, get_attn_residual))
+        get_latent_block, get_attn_residual = map(cache_fn, (get_latent_block, get_attn_residual))
 
         self.layers = nn.ModuleList([])
+        self.attn_residuals = nn.ModuleList([])
         cache_args = {'_cache': weight_tie_layers}
 
         for i in range(depth):
-            self.layers.append(nn.ModuleList([
-                get_latent_attn(**cache_args),
-                get_latent_ff(**cache_args),
-                get_attn_residual(**cache_args)
-            ]))
+            self.layers.append(get_latent_block(**cache_args))
+            self.attn_residuals.append(get_attn_residual(**cache_args))
 
         self.decoder_cross_attn = PreNorm(queries_dim, Attention(queries_dim, latent_dim, heads = cross_heads, dim_head = cross_dim_head), context_dim = latent_dim)
         self.decoder_ff = PreNorm(queries_dim, FeedForward(queries_dim)) if decoder_ff else None
@@ -243,8 +254,6 @@ class PerceiverIO(nn.Module):
 
         x = repeat(self.latents, 'n d -> b n d', b = b)
 
-        cross_attn, cross_ff = self.cross_attend_blocks
-
         # structured dropout (as done in perceiver AR https://arxiv.org/abs/2202.07765)
 
         if self.training and self.seq_dropout_prob > 0.:
@@ -252,8 +261,12 @@ class PerceiverIO(nn.Module):
 
         # cross attention only happens once for Perceiver IO
 
-        x = cross_attn(x, context = data, mask = mask, inverted_attention = self.inverted_cross_attn) + x
-        x = cross_ff(x) + x
+        x = self.cross_attend_block(
+            x,
+            context = data,
+            mask = mask,
+            inverted_attention = self.inverted_cross_attn
+        )
 
         # keep the hidden states only if they are needed for the attention residual, or explicitly requested
 
@@ -264,9 +277,8 @@ class PerceiverIO(nn.Module):
 
         # layers
 
-        for self_attn, self_ff, attn_residual in self.layers:
-            x = self_attn(x) + x
-            x = self_ff(x) + x
+        for block, attn_residual in zip(self.layers, self.attn_residuals):
+            x = block(x)
 
             if keep_hiddens:
                 block_outputs.append(x)

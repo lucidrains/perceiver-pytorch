@@ -1,6 +1,6 @@
 [project]
 name = "perceiver-pytorch"
-version = "0.10.1"
+version = "0.11.0"
 description = "Perceiver - Pytorch"
 authors = [
     { name = "Phil Wang", email = "lucidrains@gmail.com" }

@@ -71,6 +71,29 @@ queries = torch.randn(128, 32)
 logits = model(seq, queries = queries) # (1, 128, 100) - (batch, decoder seq, logits dim)
 ```
 
+For composing custom stacks, `PerceiverBlock` exposes a single cross attention + self attention block
+
+```python
+import torch
+from perceiver_pytorch import PerceiverBlock
+
+block = PerceiverBlock(
+    dim = 96,
+    context_dim = 96,
+    cross_heads = 1,
+    latent_heads = 8,
+    cross_dim_head = 64,
+    latent_dim_head = 64,
+    queries_contribute_kv = True  # queries also serve as keys / values in cross attention
+)
+
+latents = torch.randn(2, 9, 96)
+data = torch.randn(2, 187, 96)
+mask = torch.ones(2, 187).bool()
+
+block(latents, context = data, mask = mask) # (2, 9, 96)
+```
+
 As an example, using PerceiverIO as a language model
 
 ```python
